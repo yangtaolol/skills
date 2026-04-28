@@ -2,11 +2,18 @@ param(
     [Parameter(Mandatory = $true, Position = 0)]
     [string]$SourcePath,
 
-    [Parameter(Mandatory = $true, Position = 1, ValueFromRemainingArguments = $true)]
-    [string[]]$TargetPaths
+    [Parameter(Mandatory = $false, Position = 1, ValueFromRemainingArguments = $true)]
+    [string[]]$TargetPaths,
+
+    [Alias("g")]
+    [switch]$GlobalSkillLink
 )
 
 $ErrorActionPreference = "Stop"
+
+if (-not $TargetPaths -and -not $GlobalSkillLink) {
+    throw "Provide at least one target path, or use -g to create a global skill link."
+}
 
 function Resolve-FullPath {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -18,9 +25,28 @@ if (-not (Test-Path -LiteralPath $SourcePath -PathType Container)) {
 }
 
 $sourceFull = Resolve-FullPath -Path $SourcePath
+$sourceName = Split-Path -Leaf $sourceFull
 Write-Host "Source: $sourceFull"
 
-foreach ($targetPath in $TargetPaths) {
+$resolvedTargets = [System.Collections.Generic.List[string]]::new()
+if ($TargetPaths) {
+    foreach ($targetPath in $TargetPaths) {
+        if (-not [string]::IsNullOrWhiteSpace($targetPath)) {
+            $resolvedTargets.Add($targetPath)
+        }
+    }
+}
+
+if ($GlobalSkillLink) {
+    $globalSkillsDir = Join-Path -Path $HOME -ChildPath ".copilot\skills"
+    $globalTarget = Join-Path -Path $globalSkillsDir -ChildPath $sourceName
+    $resolvedTargets.Add($globalTarget)
+    Write-Host "[INFO] -g enabled, adding global target: $globalTarget"
+}
+
+$effectiveTargetPaths = $resolvedTargets | Select-Object -Unique
+
+foreach ($targetPath in $effectiveTargetPaths) {
     $targetParent = Split-Path -Parent $targetPath
     if ([string]::IsNullOrWhiteSpace($targetParent)) {
         $targetParent = "."
